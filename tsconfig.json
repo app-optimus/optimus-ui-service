@@ -1,0 +1,10 @@
+{
+    "compilerOptions": {
+      "moduleResolution": "node",
+      "resolveJsonModule": true,
+      "jsx": "react", // or "react-jsx" for React 17+
+      "allowSyntheticDefaultImports": true,
+      "esModuleInterop": true
+    }
+  }
+  
