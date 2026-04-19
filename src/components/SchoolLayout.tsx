@@ -1,6 +1,6 @@
 import * as React from "react";
 import AppTheme from "../shared-theme/AppTheme";
-import { Outlet, useNavigate, useLocation, useParams } from "react-router-dom";
+import { Outlet, useNavigate, useLocation, useParams, useOutletContext } from "react-router-dom";
 import {
   Box,
   Drawer,
@@ -27,19 +27,20 @@ const navItems = [
   { label: "Settings", path: "settings", icon: <SettingsIcon /> },
 ];
 
-function slugToTitle(slug: string): string {
-  return slug
-    .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+export interface SchoolContext {
+  entityId: string;
+}
+
+export function useSchoolContext() {
+  return useOutletContext<SchoolContext>();
 }
 
 export default function SchoolLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { schoolSlug } = useParams<{ schoolSlug: string }>();
-
-  const schoolName = schoolSlug ? slugToTitle(schoolSlug) : "School";
+  const { entityId } = useParams<{ entityId: string }>();
+  const state = location.state as { schoolName?: string } | null;
+  const schoolName = state?.schoolName || entityId || "School";
 
   return (
     <AppTheme>
@@ -82,7 +83,7 @@ export default function SchoolLayout() {
 
           <List>
             {navItems.map((item) => {
-              const fullPath = `/school/${schoolSlug}/${item.path}`;
+              const fullPath = `/school/${entityId}/${item.path}`;
               const isActive = location.pathname === fullPath;
               return (
                 <ListItem key={item.path} disablePadding sx={{ mb: 1 }}>
@@ -130,7 +131,7 @@ export default function SchoolLayout() {
           }}
         >
           <Box sx={{ minHeight: "40.5px" }} />
-          <Outlet />
+          <Outlet context={{ entityId: entityId ?? "" }} />
         </Box>
       </Box>
     </AppTheme>

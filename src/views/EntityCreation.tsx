@@ -1,4 +1,5 @@
 import * as React from "react";
+import axios from "axios";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CssBaseline from "@mui/material/CssBaseline";
@@ -6,17 +7,17 @@ import Stack from "@mui/material/Stack";
 import Step from "@mui/material/Step";
 import StepLabel from "@mui/material/StepLabel";
 import Stepper from "@mui/material/Stepper";
+import CircularProgress from "@mui/material/CircularProgress";
 import ChevronLeftRoundedIcon from "@mui/icons-material/ChevronLeftRounded";
 import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
 import EntityDetails from "../components/EntityDetails";
 import Typography from "@mui/material/Typography";
-// import Info from '../components/Info';
-// import InfoMobile from '../components/InfoMobile';
 import SelectFeatures from "../components/SelectFeatures";
 import Review from "../components/Review";
-// import SitemarkIcon from './components/SitemarkIcon';
 import AppTheme from "../shared-theme/AppTheme";
 import ColorModeIconDropdown from "../shared-theme/ColorModeIconDropdown";
+
+const API_BASE = "http://localhost:8000/user/entity";
 
 const steps = ["School Details", "Select Features", "Review"];
 const requiredFields = [
@@ -50,6 +51,8 @@ export default function EntityCreation(props: {
 
   const [activeStep, setActiveStep] = React.useState(0);
   const [errorMessage, setErrorMessage] = React.useState("");
+  const [successMessage, setSuccessMessage] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
 
   function validate() {
     if (!formData.entityName) return "Please enter School Name";
@@ -61,8 +64,43 @@ export default function EntityCreation(props: {
     if (!formData.country) return "Please enter Country";
     if (!formData.headName) return "Please enter School Head Name";
     if (!formData.headEmail) return "Please enter School Head Email";
-    return ""; // no errors
+    return "";
   }
+
+  const handleSubmitEntity = async () => {
+    setSubmitting(true);
+    const payload = {
+      name: formData.entityName,
+      code: formData.schoolCode,
+      address: formData.address1,
+      city: formData.city,
+      state: formData.state,
+      zip_code: formData.zip,
+      country: formData.country,
+      head_name: formData.headName,
+      head_email: formData.headEmail,
+      selected_features: formData.selectedFeatures,
+    };
+    try {
+      const res = await axios.post(API_BASE + "/", payload);
+      if (res.data.success) {
+        setSuccessMessage(res.data.message || "Entity created successfully!");
+        setTimeout(() => setSuccessMessage(""), 3000);
+        setActiveStep(0);
+        setFormData(defaultFormData);
+      } else {
+        setErrorMessage(res.data.message || "Failed to create entity");
+        setTimeout(() => setErrorMessage(""), 3000);
+      }
+    } catch (error: any) {
+      const msg =
+        error?.response?.data?.message || "Failed to create entity";
+      setErrorMessage(msg);
+      setTimeout(() => setErrorMessage(""), 3000);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleNext = () => {
     if (activeStep === 0) {
@@ -73,9 +111,7 @@ export default function EntityCreation(props: {
         return;
       }
     } else if (activeStep === steps.length - 1) {
-      setActiveStep(0);
-      console.log(formData);
-      setFormData(defaultFormData);
+      handleSubmitEntity();
       return;
     }
     setActiveStep((prev) => prev + 1);
@@ -184,6 +220,26 @@ export default function EntityCreation(props: {
                     {errorMessage}
                   </Box>
                 )}
+                {successMessage && (
+                  <Box
+                    sx={{
+                      position: "fixed",
+                      top: 15,
+                      left: "60%",
+                      transform: "translateX(-50%)",
+                      backgroundColor: "#4caf50",
+                      color: "white",
+                      px: 1,
+                      py: 0.3,
+                      borderRadius: 1,
+                      boxShadow: 3,
+                      zIndex: 9999,
+                      pointerEvents: "none",
+                    }}
+                  >
+                    {successMessage}
+                  </Box>
+                )}
                 {activeStep === steps.length ? (
                   <Stack spacing={2} useFlexGap></Stack>
                 ) : (
@@ -217,8 +273,9 @@ export default function EntityCreation(props: {
                       )}
                       <Button
                         variant="contained"
-                        endIcon={<ChevronRightRoundedIcon />}
+                        endIcon={submitting ? <CircularProgress size={18} color="inherit" /> : <ChevronRightRoundedIcon />}
                         onClick={handleNext}
+                        disabled={submitting}
                         sx={{ width: { xs: "100%", sm: "fit-content" } }}
                       >
                         {activeStep === steps.length - 1 ? "Save" : "Next"}

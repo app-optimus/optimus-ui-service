@@ -45,7 +45,7 @@ function App() {
 
         {/* School Routes with dedicated sidebar */}
         {isLoggedIn && (
-          <Route path="/school/:schoolSlug" element={<SchoolLayout />}>
+          <Route path="/school/:entityId" element={<SchoolLayout />}>
             <Route index element={<Navigate to="section-1" replace />} />
             <Route path="section-1" element={<Section1 />} />
             <Route path="section-2" element={<Section2 />} />

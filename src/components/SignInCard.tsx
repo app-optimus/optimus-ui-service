@@ -36,7 +36,7 @@ const Card = styled(MuiCard)(({ theme }) => ({
 
 export default function SignInCard() {
   const navigate = useNavigate();
-  const { setEmail } = useAuth();
+  const { setEmail, setAuthToken, setUserId } = useAuth();
 
   const [emailError, setEmailError] = React.useState(false);
   const [emailErrorMessage, setEmailErrorMessage] = React.useState("");
@@ -60,14 +60,22 @@ export default function SignInCard() {
     const data = new FormData(event.currentTarget);
     const email = data.get("email") as string;
     const password = data.get("password");
-    const url = `http://ec2-65-2-34-122.ap-south-1.compute.amazonaws.com/user/login?user_email=${email}&user_password=${password}`;
+    const url = `http://localhost:8000/user/login?user_email=${email}&user_password=${password}`;
     try {
       const responseData = await axios.get(url);
       setIsSuccess(true);
       setApiMessage(responseData.data.message || "Login successful!");
       setEmail(email);
+      const data = responseData.data.data;
+      if (data?.authenticationtoken) {
+        setAuthToken(data.authenticationtoken);
+      }
+      if (data?.user_id) {
+        setUserId(data.user_id);
+      }
       if (responseData.data?.set_password) {
         navigate("/update-password");
+        return;
       }
       navigate("/dashboard");
     } catch (error) {

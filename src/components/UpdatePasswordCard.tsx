@@ -63,7 +63,7 @@ export default function UpdatePasswordCard() {
     const oldPassword = data.get('oldPassword');
     const newPassword = data.get('newPassword');
 
-    const url = `http://ec2-65-2-34-122.ap-south-1.compute.amazonaws.com/user/password`;
+    const url = `http://localhost:8000/user/password`;
     const payload = {
         user_email: email,
         old_password: oldPassword,

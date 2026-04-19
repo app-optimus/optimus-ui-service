@@ -1,4 +1,6 @@
 import * as React from "react";
+import axios from "axios";
+import { useSchoolContext } from "../../components/SchoolLayout";
 import {
   Box,
   Typography,
@@ -17,6 +19,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  CircularProgress,
+  Alert,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import AddIcon from "@mui/icons-material/Add";
@@ -25,18 +29,20 @@ import EditIcon from "@mui/icons-material/Edit";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 
-interface ClassData {
-  name: string;
-  sections: string[];
+const API_BASE = "http://localhost:8000/user/class-structure";
+
+interface SectionData {
+  section_id: string;
+  section_name: string;
+  display_order: number;
 }
 
-const initialClassStructure: ClassData[] = [
-  { name: "Class I", sections: ["Section A", "Section B"] },
-  { name: "Class II", sections: ["Section A", "Section B"] },
-  { name: "Class III", sections: ["Section A", "Section B", "Section C"] },
-  { name: "Class IV", sections: ["Section A", "Section B"] },
-  { name: "Class V", sections: ["Section A", "Section B"] },
-];
+interface ClassData {
+  class_id: string;
+  class_name: string;
+  display_order: number;
+  sections: SectionData[];
+}
 
 interface PermissionValue {
   read: number;
@@ -120,6 +126,8 @@ const initialPermissionsRows: PermissionRow[] = [
 ];
 
 export default function Settings() {
+  const { entityId } = useSchoolContext();
+
   const [activeTab, setActiveTab] = React.useState(0);
   const [permissionsRows, setPermissionsRows] =
     React.useState(initialPermissionsRows);
@@ -128,123 +136,158 @@ export default function Settings() {
     [key: string]: PermissionValue;
   } | null>(null);
 
-  const [classStructure, setClassStructure] =
-    React.useState(initialClassStructure);
+  const [classStructure, setClassStructure] = React.useState<ClassData[]>([]);
+  const [classLoading, setClassLoading] = React.useState(false);
+  const [classError, setClassError] = React.useState("");
+
   const [addClassOpen, setAddClassOpen] = React.useState(false);
   const [newClassName, setNewClassName] = React.useState("");
   const [classNameError, setClassNameError] = React.useState("");
-  const [addSectionTarget, setAddSectionTarget] = React.useState<number | null>(
-    null
-  );
+  const [addSectionTarget, setAddSectionTarget] = React.useState<ClassData | null>(null);
   const [newSectionName, setNewSectionName] = React.useState("");
   const [sectionNameError, setSectionNameError] = React.useState("");
   const [renameError, setRenameError] = React.useState("");
 
-  const handleAddClass = () => {
-    const trimmed = newClassName.trim();
-    if (!trimmed) return;
-    if (classStructure.some((cls) => cls.name.toLowerCase() === trimmed.toLowerCase())) {
-      setClassNameError("A class with this name already exists");
-      return;
-    }
-    setClassStructure((prev) => [...prev, { name: trimmed, sections: [] }]);
-    setNewClassName("");
-    setClassNameError("");
-    setAddClassOpen(false);
-  };
-
-  const handleDeleteClass = (classIndex: number) => {
-    setClassStructure((prev) => prev.filter((_, i) => i !== classIndex));
-  };
-
-  const handleAddSection = () => {
-    const trimmed = newSectionName.trim();
-    if (addSectionTarget === null || !trimmed) return;
-    const existing = classStructure[addSectionTarget].sections;
-    if (existing.some((s) => s.toLowerCase() === trimmed.toLowerCase())) {
-      setSectionNameError("A section with this name already exists in this class");
-      return;
-    }
-    setClassStructure((prev) =>
-      prev.map((cls, i) =>
-        i === addSectionTarget
-          ? { ...cls, sections: [...cls.sections, trimmed] }
-          : cls
-      )
-    );
-    setNewSectionName("");
-    setSectionNameError("");
-    setAddSectionTarget(null);
-  };
-
-  const handleDeleteSection = (classIndex: number, sectionIndex: number) => {
-    setClassStructure((prev) =>
-      prev.map((cls, i) =>
-        i === classIndex
-          ? { ...cls, sections: cls.sections.filter((_, si) => si !== sectionIndex) }
-          : cls
-      )
-    );
-  };
-
   const [renameTarget, setRenameTarget] = React.useState<{
-    classIndex: number;
-    sectionIndex?: number;
+    classItem: ClassData;
+    sectionItem?: SectionData;
   } | null>(null);
   const [renameValue, setRenameValue] = React.useState("");
 
-  const openRename = (classIndex: number, sectionIndex?: number) => {
-    const current =
-      sectionIndex !== undefined
-        ? classStructure[classIndex].sections[sectionIndex]
-        : classStructure[classIndex].name;
-    setRenameValue(current);
-    setRenameTarget({ classIndex, sectionIndex });
+
+  const fetchClassStructure = React.useCallback(async () => {
+    if (!entityId) return;
+    setClassLoading(true);
+    setClassError("");
+    try {
+      const res = await axios.get(`${API_BASE}/?entity_id=${entityId}`);
+      if (res.data.success) {
+        setClassStructure(res.data.data ?? []);
+      } else {
+        setClassError(res.data.message || "Failed to load class structure");
+      }
+    } catch {
+      setClassError("Failed to load class structure");
+    } finally {
+      setClassLoading(false);
+    }
+  }, [entityId]);
+
+  React.useEffect(() => {
+    fetchClassStructure();
+  }, [fetchClassStructure]);
+
+  const handleAddClass = async () => {
+    const trimmed = newClassName.trim();
+    if (!trimmed) return;
+    try {
+      const res = await axios.post(API_BASE + "/", {
+        entity_id: entityId,
+        class_name: trimmed,
+      });
+      if (res.data.success) {
+        setNewClassName("");
+        setClassNameError("");
+        setAddClassOpen(false);
+        await fetchClassStructure();
+      } else {
+        setClassNameError(res.data.message || "Failed to add class");
+      }
+    } catch {
+      setClassNameError("Failed to add class");
+    }
   };
 
-  const handleRename = () => {
+  const handleDeleteClass = async (cls: ClassData) => {
+    try {
+      const res = await axios.delete(API_BASE + "/", {
+        data: { entity_id: entityId, class_ids: [cls.class_id] },
+      });
+      if (res.data.success) {
+        await fetchClassStructure();
+      }
+    } catch {
+      setClassError("Failed to delete class");
+    }
+  };
+
+  const handleAddSection = async () => {
+    const trimmed = newSectionName.trim();
+    if (addSectionTarget === null || !trimmed) return;
+    try {
+      const res = await axios.post(API_BASE + "/section", {
+        entity_id: entityId,
+        class_id: addSectionTarget.class_id,
+        sections: [{ section_name: trimmed }],
+      });
+      if (res.data.success) {
+        setNewSectionName("");
+        setSectionNameError("");
+        setAddSectionTarget(null);
+        await fetchClassStructure();
+      } else {
+        setSectionNameError(res.data.message || "Failed to add section");
+      }
+    } catch {
+      setSectionNameError("Failed to add section");
+    }
+  };
+
+  const handleDeleteSection = async (cls: ClassData, section: SectionData) => {
+    try {
+      const res = await axios.delete(API_BASE + "/section", {
+        data: {
+          entity_id: entityId,
+          class_id: cls.class_id,
+          section_ids: [section.section_id],
+        },
+      });
+      if (res.data.success) {
+        await fetchClassStructure();
+      }
+    } catch {
+      setClassError("Failed to delete section");
+    }
+  };
+
+  const openRename = (classItem: ClassData, sectionItem?: SectionData) => {
+    const current = sectionItem ? sectionItem.section_name : classItem.class_name;
+    setRenameValue(current);
+    setRenameTarget({ classItem, sectionItem });
+  };
+
+  const handleRename = async () => {
     const trimmed = renameValue.trim();
     if (!renameTarget || !trimmed) return;
-    const { classIndex, sectionIndex } = renameTarget;
+    const { classItem, sectionItem } = renameTarget;
 
-    if (sectionIndex !== undefined) {
-      const siblings = classStructure[classIndex].sections;
-      if (
-        siblings.some(
-          (s, si) => si !== sectionIndex && s.toLowerCase() === trimmed.toLowerCase()
-        )
-      ) {
-        setRenameError("A section with this name already exists in this class");
-        return;
+    try {
+      let res;
+      if (sectionItem) {
+        res = await axios.patch(API_BASE + "/section", {
+          entity_id: entityId,
+          class_id: classItem.class_id,
+          section_id: sectionItem.section_id,
+          section_name: trimmed,
+        });
+      } else {
+        res = await axios.patch(API_BASE + "/", {
+          entity_id: entityId,
+          class_id: classItem.class_id,
+          class_name: trimmed,
+        });
       }
-    } else {
-      if (
-        classStructure.some(
-          (cls, i) => i !== classIndex && cls.name.toLowerCase() === trimmed.toLowerCase()
-        )
-      ) {
-        setRenameError("A class with this name already exists");
-        return;
+      if (res.data.success) {
+        setRenameTarget(null);
+        setRenameValue("");
+        setRenameError("");
+        await fetchClassStructure();
+      } else {
+        setRenameError(res.data.message || "Failed to rename");
       }
+    } catch {
+      setRenameError("Failed to rename");
     }
-
-    setClassStructure((prev) =>
-      prev.map((cls, i) => {
-        if (i !== classIndex) return cls;
-        if (sectionIndex !== undefined) {
-          return {
-            ...cls,
-            sections: cls.sections.map((s, si) =>
-              si === sectionIndex ? trimmed : s
-            ),
-          };
-        }
-        return { ...cls, name: trimmed };
-      })
-    );
-    setRenameTarget(null);
-    setRenameValue("");
-    setRenameError("");
   };
 
   const handleEdit = (index: number) => {
@@ -414,99 +457,117 @@ export default function Settings() {
             </Button>
           </Box>
 
-          <SimpleTreeView>
-            {classStructure.map((cls, classIndex) => (
-              <TreeItem
-                key={classIndex}
-                itemId={`class-${classIndex}`}
-                label={
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      py: 0.5,
-                    }}
-                  >
-                    <Typography fontWeight={500}>{cls.name}</Typography>
-                    <Box>
-                      <IconButton
-                        size="small"
-                        title="Rename class"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openRename(classIndex);
-                        }}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        title="Add section"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setAddSectionTarget(classIndex);
-                        }}
-                      >
-                        <AddIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        title="Delete class"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteClass(classIndex);
-                        }}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  </Box>
-                }
-              >
-                {cls.sections.map((section, sectionIndex) => (
-                  <TreeItem
-                    key={sectionIndex}
-                    itemId={`class-${classIndex}-section-${sectionIndex}`}
-                    label={
-                      <Box
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          py: 0.5,
-                        }}
-                      >
-                        <Typography variant="body2">{section}</Typography>
-                        <Box>
-                          <IconButton
-                            size="small"
-                            title="Rename section"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openRename(classIndex, sectionIndex);
-                            }}
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            title="Delete section"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteSection(classIndex, sectionIndex);
-                            }}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Box>
+          {classError && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setClassError("")}>
+              {classError}
+            </Alert>
+          )}
+
+          {classLoading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : classStructure.length === 0 ? (
+            <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
+              No classes added yet. Click "Add Class" to get started.
+            </Typography>
+          ) : (
+            <SimpleTreeView>
+              {classStructure.map((cls) => (
+                <TreeItem
+                  key={cls.class_id}
+                  itemId={cls.class_id}
+                  label={
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        py: 0.5,
+                      }}
+                    >
+                      <Typography fontWeight={500}>{cls.class_name}</Typography>
+                      <Box>
+                        <IconButton
+                          size="small"
+                          title="Rename class"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openRename(cls);
+                          }}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          title="Add section"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAddSectionTarget(cls);
+                          }}
+                        >
+                          <AddIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          title="Delete class"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClass(cls);
+                          }}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
                       </Box>
-                    }
-                  />
-                ))}
-              </TreeItem>
-            ))}
-          </SimpleTreeView>
+                    </Box>
+                  }
+                >
+                  {cls.sections.map((section) => (
+                    <TreeItem
+                      key={section.section_id}
+                      itemId={section.section_id}
+                      label={
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            py: 0.5,
+                          }}
+                        >
+                          <Typography variant="body2">
+                            {section.section_name}
+                          </Typography>
+                          <Box>
+                            <IconButton
+                              size="small"
+                              title="Rename section"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openRename(cls, section);
+                              }}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              title="Delete section"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteSection(cls, section);
+                              }}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Box>
+                        </Box>
+                      }
+                    />
+                  ))}
+                </TreeItem>
+              ))}
+            </SimpleTreeView>
+          )}
         </Box>
       </TabPanel>
 
@@ -554,8 +615,7 @@ export default function Settings() {
         fullWidth
       >
         <DialogTitle>
-          Add Section to{" "}
-          {addSectionTarget !== null && classStructure[addSectionTarget]?.name}
+          Add Section to {addSectionTarget?.class_name}
         </DialogTitle>
         <DialogContent>
           <TextField
@@ -593,8 +653,7 @@ export default function Settings() {
         fullWidth
       >
         <DialogTitle>
-          Rename{" "}
-          {renameTarget?.sectionIndex !== undefined ? "Section" : "Class"}
+          Rename {renameTarget?.sectionItem ? "Section" : "Class"}
         </DialogTitle>
         <DialogContent>
           <TextField
