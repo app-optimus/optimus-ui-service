@@ -14,17 +14,45 @@ import {
   CssBaseline,
   Divider,
   IconButton,
+  Collapse,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import FolderIcon from "@mui/icons-material/Folder";
 import SettingsIcon from "@mui/icons-material/Settings";
+import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
+import AccountTreeIcon from "@mui/icons-material/AccountTree";
+import QuizIcon from "@mui/icons-material/Quiz";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
-const navItems = [
-  { label: "Section 1", path: "section-1", icon: <FolderIcon /> },
-  { label: "Section 2", path: "section-2", icon: <FolderIcon /> },
+interface NavChild {
+  label: string;
+  path: string;
+  icon: React.ReactNode;
+}
+
+interface NavItem {
+  label: string;
+  path: string;
+  icon: React.ReactNode;
+  children?: NavChild[];
+}
+
+const navItems: NavItem[] = [
+  { label: "Dashboard", path: "section-1", icon: <FolderIcon /> },
+  { label: "Quizzes", path: "quizzes", icon: <QuizIcon /> },
   { label: "Section 3", path: "section-3", icon: <FolderIcon /> },
-  { label: "Section 4", path: "section-4", icon: <FolderIcon /> },
-  { label: "Settings", path: "settings", icon: <SettingsIcon /> },
+  { label: "Users Metabase", path: "section-4", icon: <FolderIcon /> },
+  {
+    label: "Settings",
+    path: "settings",
+    icon: <SettingsIcon />,
+    children: [
+      { label: "Permissions", path: "settings/permissions", icon: <VerifiedUserIcon /> },
+      { label: "Class Structure", path: "settings/class-structure", icon: <AccountTreeIcon /> },
+      { label: "Question Templates", path: "settings/question-templates", icon: <QuizIcon /> },
+    ],
+  },
 ];
 
 export interface SchoolContext {
@@ -41,6 +69,13 @@ export default function SchoolLayout() {
   const { entityId } = useParams<{ entityId: string }>();
   const state = location.state as { schoolName?: string } | null;
   const schoolName = state?.schoolName || entityId || "School";
+
+  const isSettingsRoute = location.pathname.includes("/settings");
+  const [settingsOpen, setSettingsOpen] = React.useState(isSettingsRoute);
+
+  React.useEffect(() => {
+    if (isSettingsRoute) setSettingsOpen(true);
+  }, [isSettingsRoute]);
 
   return (
     <AppTheme>
@@ -84,38 +119,97 @@ export default function SchoolLayout() {
           <List>
             {navItems.map((item) => {
               const fullPath = `/school/${entityId}/${item.path}`;
-              const isActive = location.pathname === fullPath;
+              const hasChildren = !!item.children?.length;
+              const childActive = item.children?.some(
+                (child) => location.pathname === `/school/${entityId}/${child.path}`
+              );
+              const isActive =
+                location.pathname === fullPath || location.pathname.startsWith(`${fullPath}/`) || !!childActive;
+
               return (
-                <ListItem key={item.path} disablePadding sx={{ mb: 1 }}>
-                  <ListItemButton
-                    onClick={() => navigate(fullPath)}
-                    sx={{
-                      paddingY: 1.5,
-                      paddingX: 3,
-                      backgroundColor: isActive ? "#4876EF" : "#CCCCFF",
-                      "&:hover": {
-                        backgroundColor: "#4876EF",
-                      },
-                    }}
-                  >
-                    <ListItemIcon
+                <React.Fragment key={item.path}>
+                  <ListItem disablePadding sx={{ mb: hasChildren && settingsOpen ? 0.5 : 1 }}>
+                    <ListItemButton
+                      onClick={() =>
+                        hasChildren ? setSettingsOpen((prev) => !prev) : navigate(fullPath)
+                      }
                       sx={{
-                        minWidth: 32,
-                        color: isActive ? "#1976d2" : "inherit",
+                        paddingY: 1.5,
+                        paddingX: 3,
+                        backgroundColor: isActive ? "#4876EF" : "#CCCCFF",
+                        "&:hover": {
+                          backgroundColor: "#4876EF",
+                        },
                       }}
                     >
-                      {item.icon}
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={item.label}
-                      primaryTypographyProps={{
-                        fontWeight: isActive ? 600 : 400,
-                        fontSize: "1rem",
-                        color: isActive ? "inherit" : "black",
-                      }}
-                    />
-                  </ListItemButton>
-                </ListItem>
+                      <ListItemIcon
+                        sx={{
+                          minWidth: 32,
+                          color: isActive ? "#1976d2" : "inherit",
+                        }}
+                      >
+                        {item.icon}
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={item.label}
+                        primaryTypographyProps={{
+                          fontWeight: isActive ? 600 : 400,
+                          fontSize: "1rem",
+                          color: isActive ? "inherit" : "black",
+                        }}
+                      />
+                      {hasChildren && (
+                        <Box sx={{ display: "flex", color: isActive ? "inherit" : "black" }}>
+                          {settingsOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                        </Box>
+                      )}
+                    </ListItemButton>
+                  </ListItem>
+
+                  {hasChildren && (
+                    <Collapse in={settingsOpen} timeout="auto" unmountOnExit>
+                      <List disablePadding>
+                        {item.children!.map((child) => {
+                          const childFullPath = `/school/${entityId}/${child.path}`;
+                          const isChildActive = location.pathname === childFullPath;
+                          return (
+                            <ListItem key={child.path} disablePadding sx={{ mb: 1 }}>
+                              <ListItemButton
+                                onClick={() => navigate(childFullPath)}
+                                sx={{
+                                  paddingY: 1,
+                                  paddingX: 3,
+                                  paddingLeft: 5,
+                                  backgroundColor: isChildActive ? "#4876EF" : "#E4E4FF",
+                                  "&:hover": {
+                                    backgroundColor: "#4876EF",
+                                  },
+                                }}
+                              >
+                                <ListItemIcon
+                                  sx={{
+                                    minWidth: 28,
+                                    color: isChildActive ? "#1976d2" : "inherit",
+                                  }}
+                                >
+                                  {child.icon}
+                                </ListItemIcon>
+                                <ListItemText
+                                  primary={child.label}
+                                  primaryTypographyProps={{
+                                    fontWeight: isChildActive ? 600 : 400,
+                                    fontSize: "0.9rem",
+                                    color: isChildActive ? "inherit" : "black",
+                                  }}
+                                />
+                              </ListItemButton>
+                            </ListItem>
+                          );
+                        })}
+                      </List>
+                    </Collapse>
+                  )}
+                </React.Fragment>
               );
             })}
           </List>

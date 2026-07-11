@@ -1,5 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import { GLOBAL_AUTH_TOKEN } from '../config/auth';
+
+// Apply immediately so any request fired before the provider mounts is
+// still authenticated.
+axios.defaults.headers.common['authenticationtoken'] = GLOBAL_AUTH_TOKEN;
 
 interface AuthContextType {
   email: string;
@@ -15,7 +20,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [email, setEmail] = useState('');
-  const [authToken, setAuthToken] = useState('');
+  const [authToken, setAuthToken] = useState(GLOBAL_AUTH_TOKEN);
   const [userId, setUserId] = useState('');
 
   useEffect(() => {
@@ -28,7 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     setEmail('');
-    setAuthToken('');
+    setAuthToken(GLOBAL_AUTH_TOKEN);
     setUserId('');
   };
 

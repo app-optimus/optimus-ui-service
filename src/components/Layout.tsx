@@ -18,6 +18,7 @@ import AddBoxIcon from "@mui/icons-material/AddBox";
 import { SitemarkIcon } from "./CustomIcons";
 import BusinessCenterIcon from "@mui/icons-material/BusinessCenter";
 import PeopleIcon from "@mui/icons-material/People";
+import QuizIcon from "@mui/icons-material/Quiz";
 const navItems = [
   {
     label: "Admin Portfolio",
@@ -30,6 +31,11 @@ const navItems = [
     label: "Global Users",
     path: "/global-users",
     icon: <PeopleIcon />,
+  },
+  {
+    label: "Question Templates",
+    path: "/question-templates",
+    icon: <QuizIcon />,
   },
 ];
 
