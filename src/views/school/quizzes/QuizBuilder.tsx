@@ -65,6 +65,8 @@ interface QuizQuestion {
   display_order: number;
 }
 
+type QuizLifecycleStatus = "draft" | "ready" | "published";
+
 interface QuizDetail {
   quiz_id: string;
   entity_id: string;
@@ -72,8 +74,24 @@ interface QuizDetail {
   section_id: string;
   title: string;
   description: string | null;
-  status: "draft" | "published";
+  status: QuizLifecycleStatus;
+  scheduled_start: string | null;
   questions: QuizQuestion[];
+}
+
+const STATUS_CHIP_PROPS: Record<QuizLifecycleStatus, { label: string; color: "default" | "info" | "success"; variant: "outlined" | "filled" }> = {
+  draft: { label: "Draft", color: "default", variant: "outlined" },
+  ready: { label: "Ready", color: "info", variant: "filled" },
+  published: { label: "Published", color: "success", variant: "filled" },
+};
+
+function formatScheduledStart(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 interface SectionData {
@@ -543,8 +561,18 @@ export default function QuizBuilder() {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editingQuestion, setEditingQuestion] = React.useState<QuizQuestion | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<QuizQuestion | null>(null);
+
+  const [saveOpen, setSaveOpen] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+
+  const [revertOpen, setRevertOpen] = React.useState(false);
+  const [reverting, setReverting] = React.useState(false);
+
   const [publishOpen, setPublishOpen] = React.useState(false);
   const [publishing, setPublishing] = React.useState(false);
+  const [scheduledStart, setScheduledStart] = React.useState("");
+  const [publishError, setPublishError] = React.useState("");
+
   const [actionError, setActionError] = React.useState("");
 
   const fetchQuiz = React.useCallback(async () => {
@@ -593,7 +621,9 @@ export default function QuizBuilder() {
 
   const questionCount = quiz?.questions.length ?? 0;
   const isDraft = quiz?.status === "draft";
-  const canPublish = isDraft && questionCount >= QUIZ_MIN_QUESTIONS && questionCount <= QUIZ_MAX_QUESTIONS;
+  const isReady = quiz?.status === "ready";
+  const isPublished = quiz?.status === "published";
+  const canSave = isDraft && questionCount >= QUIZ_MIN_QUESTIONS && questionCount <= QUIZ_MAX_QUESTIONS;
 
   const handleDeleteQuestion = async () => {
     if (!deleteTarget || !quiz) return;
@@ -613,20 +643,77 @@ export default function QuizBuilder() {
     }
   };
 
-  const handlePublish = async () => {
+  const handleSave = async () => {
     if (!quiz) return;
-    setPublishing(true);
+    setSaving(true);
     setActionError("");
     try {
-      const res = await axios.post(`${QUIZ_API}/publish`, { entity_id: entityId, quiz_id: quiz.quiz_id });
+      const res = await axios.post(`${QUIZ_API}/save`, { entity_id: entityId, quiz_id: quiz.quiz_id });
+      if (res.data.success) {
+        setSaveOpen(false);
+        await fetchQuiz();
+      } else {
+        setActionError(res.data.message || "Failed to save quiz");
+      }
+    } catch (err: any) {
+      setActionError(err?.response?.data?.message || "Failed to save quiz");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRevertToDraft = async () => {
+    if (!quiz) return;
+    setReverting(true);
+    setActionError("");
+    try {
+      const res = await axios.post(`${QUIZ_API}/revert-to-draft`, { entity_id: entityId, quiz_id: quiz.quiz_id });
+      if (res.data.success) {
+        setRevertOpen(false);
+        await fetchQuiz();
+      } else {
+        setActionError(res.data.message || "Failed to move quiz back to draft");
+      }
+    } catch (err: any) {
+      setActionError(err?.response?.data?.message || "Failed to move quiz back to draft");
+    } finally {
+      setReverting(false);
+    }
+  };
+
+  const handleOpenPublish = () => {
+    setScheduledStart("");
+    setPublishError("");
+    setPublishOpen(true);
+  };
+
+  const handlePublish = async () => {
+    if (!quiz) return;
+    if (!scheduledStart) {
+      setPublishError("Please choose when this quiz should go live");
+      return;
+    }
+    if (new Date(scheduledStart).getTime() <= Date.now()) {
+      setPublishError("The start date/time must be in the future");
+      return;
+    }
+
+    setPublishing(true);
+    setPublishError("");
+    try {
+      const res = await axios.post(`${QUIZ_API}/publish`, {
+        entity_id: entityId,
+        quiz_id: quiz.quiz_id,
+        scheduled_start: scheduledStart,
+      });
       if (res.data.success) {
         setPublishOpen(false);
         await fetchQuiz();
       } else {
-        setActionError(res.data.message || "Failed to publish quiz");
+        setPublishError(res.data.message || "Failed to publish quiz");
       }
     } catch (err: any) {
-      setActionError(err?.response?.data?.message || "Failed to publish quiz");
+      setPublishError(err?.response?.data?.message || "Failed to publish quiz");
     } finally {
       setPublishing(false);
     }
@@ -664,11 +751,7 @@ export default function QuizBuilder() {
           <Box>
             <Stack direction="row" spacing={1.5} alignItems="center">
               <Typography variant="h4">{quiz.title}</Typography>
-              <Chip
-                label={quiz.status === "published" ? "Published" : "Draft"}
-                color={quiz.status === "published" ? "success" : "default"}
-                variant={quiz.status === "published" ? "filled" : "outlined"}
-              />
+              <Chip {...STATUS_CHIP_PROPS[quiz.status]} />
             </Stack>
             {quiz.description && (
               <Typography color="text.secondary" sx={{ mt: 0.5 }}>
@@ -678,6 +761,11 @@ export default function QuizBuilder() {
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               {classNameById[quiz.class_id] ?? quiz.class_id} - {sectionNameById[quiz.section_id] ?? quiz.section_id}
             </Typography>
+            {isPublished && quiz.scheduled_start && (
+              <Typography variant="body2" color="success.main" sx={{ mt: 0.5 }}>
+                Live from {formatScheduledStart(quiz.scheduled_start)}
+              </Typography>
+            )}
           </Box>
 
           <Stack alignItems="flex-end" spacing={1}>
@@ -685,14 +773,19 @@ export default function QuizBuilder() {
               {questionCount} / {QUIZ_MAX_QUESTIONS} questions
             </Typography>
             {isDraft && (
-              <Button
-                variant="contained"
-                color="success"
-                disabled={!canPublish}
-                onClick={() => setPublishOpen(true)}
-              >
-                Publish Quiz
+              <Button variant="contained" disabled={!canSave} onClick={() => setSaveOpen(true)}>
+                Save
               </Button>
+            )}
+            {isReady && (
+              <Stack direction="row" spacing={1}>
+                <Button variant="outlined" onClick={() => setRevertOpen(true)}>
+                  Back to Draft
+                </Button>
+                <Button variant="contained" color="success" onClick={handleOpenPublish}>
+                  Publish Quiz
+                </Button>
+              </Stack>
             )}
           </Stack>
         </Stack>
@@ -700,7 +793,13 @@ export default function QuizBuilder() {
         {isDraft && questionCount < QUIZ_MIN_QUESTIONS && (
           <Alert severity="info" sx={{ mt: 2 }}>
             Add at least {QUIZ_MIN_QUESTIONS - questionCount} more question
-            {QUIZ_MIN_QUESTIONS - questionCount === 1 ? "" : "s"} to be able to publish this quiz.
+            {QUIZ_MIN_QUESTIONS - questionCount === 1 ? "" : "s"} to be able to save this quiz as ready.
+          </Alert>
+        )}
+        {isReady && (
+          <Alert severity="info" sx={{ mt: 2 }}>
+            This quiz is ready. Publish it with a start date/time to make it live for students, or move it
+            back to draft to keep editing questions.
           </Alert>
         )}
       </Box>
@@ -792,14 +891,60 @@ export default function QuizBuilder() {
         </DialogActions>
       </Dialog>
 
-      {/* Publish confirmation */}
+      {/* Save (mark ready) confirmation */}
+      <Dialog open={saveOpen} onClose={() => setSaveOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Save Quiz</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Saving marks this quiz as ready and locks question editing. You can still move it back to
+            draft later if you need to make changes. Continue?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSaveOpen(false)} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={handleSave} disabled={saving}>
+            {saving ? <CircularProgress size={16} /> : "Save"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Back to draft confirmation */}
+      <Dialog open={revertOpen} onClose={() => setRevertOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Move Back to Draft</DialogTitle>
+        <DialogContent>
+          <Typography>This will unlock the quiz so you can add, edit, or delete questions again. Continue?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRevertOpen(false)} disabled={reverting}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={handleRevertToDraft} disabled={reverting}>
+            {reverting ? <CircularProgress size={16} /> : "Move to Draft"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Publish dialog - requires a start date/time */}
       <Dialog open={publishOpen} onClose={() => setPublishOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Publish Quiz</DialogTitle>
         <DialogContent>
-          <Typography>
-            Publishing locks this quiz - you won't be able to add, edit, or delete questions afterwards.
-            Continue?
-          </Typography>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {publishError && <Alert severity="error">{publishError}</Alert>}
+            <Typography>
+              Choose when this quiz should start and become available to students. Publishing is final -
+              you won't be able to edit questions afterwards.
+            </Typography>
+            <TextField
+              label="Start date & time"
+              type="datetime-local"
+              value={scheduledStart}
+              onChange={(e) => setScheduledStart(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPublishOpen(false)} disabled={publishing}>

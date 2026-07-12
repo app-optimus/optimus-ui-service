@@ -39,16 +39,25 @@ interface ClassData {
   sections: SectionData[];
 }
 
+type QuizLifecycleStatus = "draft" | "ready" | "published";
+
 interface QuizRow {
   quiz_id: string;
   class_id: string;
   section_id: string;
   title: string;
   description: string | null;
-  status: "draft" | "published";
+  status: QuizLifecycleStatus;
+  scheduled_start: string | null;
   created_at: string;
   question_count: number;
 }
+
+const STATUS_CHIP_PROPS: Record<QuizLifecycleStatus, { label: string; color: "default" | "info" | "success"; variant: "outlined" | "filled" }> = {
+  draft: { label: "Draft", color: "default", variant: "outlined" },
+  ready: { label: "Ready", color: "info", variant: "filled" },
+  published: { label: "Published", color: "success", variant: "filled" },
+};
 
 const QUIZ_COLUMNS: Column[] = [
   { field: "title", headerName: "Title", align: "left" },
@@ -56,6 +65,7 @@ const QUIZ_COLUMNS: Column[] = [
   { field: "section_name", headerName: "Section", align: "left" },
   { field: "question_count", headerName: "Questions", align: "center" },
   { field: "status", headerName: "Status", align: "center" },
+  { field: "scheduled_start", headerName: "Starts", align: "left" },
   { field: "created_at", headerName: "Created", align: "left" },
   { field: "actions", headerName: "", align: "right" },
 ];
@@ -69,7 +79,7 @@ export default function QuizzesList() {
 
   const [classFilter, setClassFilter] = React.useState("");
   const [sectionFilter, setSectionFilter] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState<"" | "draft" | "published">("");
+  const [statusFilter, setStatusFilter] = React.useState<"" | QuizLifecycleStatus>("");
 
   const [quizzes, setQuizzes] = React.useState<QuizRow[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -191,6 +201,9 @@ export default function QuizzesList() {
     class_name: classNameById[quiz.class_id] ?? quiz.class_id,
     section_name: sectionNameById[quiz.section_id] ?? quiz.section_id,
     created_at: new Date(quiz.created_at).toLocaleDateString(),
+    scheduled_start: quiz.scheduled_start
+      ? new Date(quiz.scheduled_start).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+      : "-",
   }));
 
   return (
@@ -239,10 +252,11 @@ export default function QuizzesList() {
           <Select
             label="Status"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as "" | "draft" | "published")}
+            onChange={(e) => setStatusFilter(e.target.value as "" | QuizLifecycleStatus)}
           >
             <MenuItem value="">All Statuses</MenuItem>
             <MenuItem value="draft">Draft</MenuItem>
+            <MenuItem value="ready">Ready</MenuItem>
             <MenuItem value="published">Published</MenuItem>
           </Select>
         </FormControl>
@@ -264,14 +278,7 @@ export default function QuizzesList() {
           rows={rows}
           renderCell={(column, value, row) => {
             if (column.field === "status") {
-              return (
-                <Chip
-                  size="small"
-                  label={value === "published" ? "Published" : "Draft"}
-                  color={value === "published" ? "success" : "default"}
-                  variant={value === "published" ? "filled" : "outlined"}
-                />
-              );
+              return <Chip size="small" {...STATUS_CHIP_PROPS[value as QuizLifecycleStatus]} />;
             }
             if (column.field === "actions") {
               return (

@@ -11,10 +11,10 @@ import GlobalUsers from "./views/GlobalUsers";
 import QuestionTemplates from "./views/QuestionTemplates";
 import SchoolLayout from "./components/SchoolLayout";
 import Section1 from "./views/school/Section1";
-import Section3 from "./views/school/Section3";
 import Section4 from "./views/school/Section4";
 import QuizzesList from "./views/school/quizzes/QuizzesList";
 import QuizBuilder from "./views/school/quizzes/QuizBuilder";
+import StudyMaterialList from "./views/school/study-material/StudyMaterialList";
 import PermissionsSettings from "./views/school/settings/PermissionsSettings";
 import ClassStructureSettings from "./views/school/settings/ClassStructureSettings";
 import QuestionTemplatesSettings from "./views/school/settings/QuestionTemplatesSettings";
@@ -61,7 +61,7 @@ function App() {
             <Route path="section-1" element={<Section1 />} />
             <Route path="quizzes" element={<QuizzesList />} />
             <Route path="quizzes/:quizId" element={<QuizBuilder />} />
-            <Route path="section-3" element={<Section3 />} />
+            <Route path="study-material" element={<StudyMaterialList />} />
             <Route path="section-4" element={<Section4 />} />
             <Route path="settings" element={<SettingsIndexRedirect />} />
             <Route path="settings/permissions" element={<PermissionsSettings />} />

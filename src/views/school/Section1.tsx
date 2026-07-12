@@ -7,6 +7,7 @@ import GroupsIcon from "@mui/icons-material/Groups";
 import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
 import QuizIcon from "@mui/icons-material/Quiz";
 import EditNoteIcon from "@mui/icons-material/EditNote";
+import HourglassTopIcon from "@mui/icons-material/HourglassTop";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { useSchoolContext } from "../../components/SchoolLayout";
 
@@ -31,6 +32,7 @@ interface HeadcountSummary {
 
 interface QuizSummary {
   draft_count: number;
+  ready_count: number;
   published_count: number;
 }
 
@@ -155,7 +157,7 @@ function QuizSummaryCard() {
           params: { entity_id: entityId },
         });
         if (res.data.success) {
-          setSummary(res.data.data ?? { draft_count: 0, published_count: 0 });
+          setSummary(res.data.data ?? { draft_count: 0, ready_count: 0, published_count: 0 });
         } else {
           setError(res.data.message || "Failed to load quiz summary");
         }
@@ -185,6 +187,7 @@ function QuizSummaryCard() {
     <StatRow
       stats={[
         { label: "Draft", value: summary?.draft_count ?? 0, icon: <EditNoteIcon fontSize="small" /> },
+        { label: "Ready", value: summary?.ready_count ?? 0, icon: <HourglassTopIcon fontSize="small" /> },
         {
           label: "Published",
           value: summary?.published_count ?? 0,

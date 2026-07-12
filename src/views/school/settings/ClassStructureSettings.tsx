@@ -13,14 +13,21 @@ import {
   DialogActions,
   CircularProgress,
   Alert,
+  Chip,
+  Stack,
+  List,
+  ListItem,
+  ListItemText,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 
 const API_BASE = "http://localhost:8000/user/class-structure";
+const SUBJECTS_API_BASE = "http://localhost:8000/user/subject";
 
 interface SectionData {
   section_id: string;
@@ -33,6 +40,13 @@ interface ClassData {
   class_name: string;
   display_order: number;
   sections: SectionData[];
+}
+
+interface SubjectData {
+  subject_id: string;
+  class_id: string;
+  subject_name: string;
+  display_order: number;
 }
 
 export default function ClassStructureSettings() {
@@ -53,8 +67,42 @@ export default function ClassStructureSettings() {
   const [renameTarget, setRenameTarget] = React.useState<{
     classItem: ClassData;
     sectionItem?: SectionData;
+    subjectItem?: SubjectData;
   } | null>(null);
   const [renameValue, setRenameValue] = React.useState("");
+
+  const [subjects, setSubjects] = React.useState<SubjectData[]>([]);
+  const [subjectsError, setSubjectsError] = React.useState("");
+  const [manageSubjectsTarget, setManageSubjectsTarget] = React.useState<ClassData | null>(null);
+  const [newSubjectName, setNewSubjectName] = React.useState("");
+  const [newSubjectError, setNewSubjectError] = React.useState("");
+
+  const subjectsByClass = React.useMemo(() => {
+    const map: Record<string, SubjectData[]> = {};
+    subjects.forEach((subject) => {
+      if (!map[subject.class_id]) map[subject.class_id] = [];
+      map[subject.class_id].push(subject);
+    });
+    return map;
+  }, [subjects]);
+
+  const fetchSubjects = React.useCallback(async () => {
+    if (!entityId) return;
+    try {
+      const res = await axios.get(`${SUBJECTS_API_BASE}/?entity_id=${entityId}`);
+      if (res.data.success) {
+        setSubjects(res.data.data ?? []);
+      } else {
+        setSubjectsError(res.data.message || "Failed to load subjects");
+      }
+    } catch {
+      setSubjectsError("Failed to load subjects");
+    }
+  }, [entityId]);
+
+  React.useEffect(() => {
+    fetchSubjects();
+  }, [fetchSubjects]);
 
   const fetchClassStructure = React.useCallback(async () => {
     if (!entityId) return;
@@ -151,20 +199,31 @@ export default function ClassStructureSettings() {
     }
   };
 
-  const openRename = (classItem: ClassData, sectionItem?: SectionData) => {
-    const current = sectionItem ? sectionItem.section_name : classItem.class_name;
+  const openRename = (classItem: ClassData, sectionItem?: SectionData, subjectItem?: SubjectData) => {
+    const current = subjectItem
+      ? subjectItem.subject_name
+      : sectionItem
+      ? sectionItem.section_name
+      : classItem.class_name;
     setRenameValue(current);
-    setRenameTarget({ classItem, sectionItem });
+    setRenameTarget({ classItem, sectionItem, subjectItem });
   };
 
   const handleRename = async () => {
     const trimmed = renameValue.trim();
     if (!renameTarget || !trimmed) return;
-    const { classItem, sectionItem } = renameTarget;
+    const { classItem, sectionItem, subjectItem } = renameTarget;
 
     try {
       let res;
-      if (sectionItem) {
+      if (subjectItem) {
+        res = await axios.patch(SUBJECTS_API_BASE + "/", {
+          entity_id: entityId,
+          class_id: classItem.class_id,
+          subject_id: subjectItem.subject_id,
+          subject_name: trimmed,
+        });
+      } else if (sectionItem) {
         res = await axios.patch(API_BASE + "/section", {
           entity_id: entityId,
           class_id: classItem.class_id,
@@ -182,12 +241,50 @@ export default function ClassStructureSettings() {
         setRenameTarget(null);
         setRenameValue("");
         setRenameError("");
-        await fetchClassStructure();
+        if (subjectItem) {
+          await fetchSubjects();
+        } else {
+          await fetchClassStructure();
+        }
       } else {
         setRenameError(res.data.message || "Failed to rename");
       }
     } catch {
       setRenameError("Failed to rename");
+    }
+  };
+
+  const handleAddSubject = async () => {
+    const trimmed = newSubjectName.trim();
+    if (!trimmed || !manageSubjectsTarget) return;
+    try {
+      const res = await axios.post(`${SUBJECTS_API_BASE}/`, {
+        entity_id: entityId,
+        class_id: manageSubjectsTarget.class_id,
+        subject_name: trimmed,
+      });
+      if (res.data.success) {
+        setNewSubjectName("");
+        setNewSubjectError("");
+        await fetchSubjects();
+      } else {
+        setNewSubjectError(res.data.message || "Failed to add subject");
+      }
+    } catch {
+      setNewSubjectError("Failed to add subject");
+    }
+  };
+
+  const handleDeleteSubject = async (cls: ClassData, subject: SubjectData) => {
+    try {
+      const res = await axios.delete(`${SUBJECTS_API_BASE}/`, {
+        data: { entity_id: entityId, class_id: cls.class_id, subject_ids: [subject.subject_id] },
+      });
+      if (res.data.success) {
+        await fetchSubjects();
+      }
+    } catch {
+      setSubjectsError("Failed to delete subject");
     }
   };
 
@@ -218,6 +315,12 @@ export default function ClassStructureSettings() {
         </Alert>
       )}
 
+      {subjectsError && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setSubjectsError("")}>
+          {subjectsError}
+        </Alert>
+      )}
+
       {classLoading ? (
         <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
           <CircularProgress />
@@ -239,10 +342,16 @@ export default function ClassStructureSettings() {
                     alignItems: "center",
                     justifyContent: "space-between",
                     py: 0.5,
+                    gap: 1,
                   }}
                 >
-                  <Typography fontWeight={500}>{cls.class_name}</Typography>
-                  <Box>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+                    <Typography fontWeight={500}>{cls.class_name}</Typography>
+                    {(subjectsByClass[cls.class_id] ?? []).map((subject) => (
+                      <Chip key={subject.subject_id} label={subject.subject_name} size="small" variant="outlined" />
+                    ))}
+                  </Box>
+                  <Box sx={{ display: "flex", flexShrink: 0 }}>
                     <IconButton
                       size="small"
                       title="Rename class"
@@ -262,6 +371,16 @@ export default function ClassStructureSettings() {
                       }}
                     >
                       <AddIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      title="Manage subjects"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setManageSubjectsTarget(cls);
+                      }}
+                    >
+                      <MenuBookIcon fontSize="small" />
                     </IconButton>
                     <IconButton
                       size="small"
@@ -395,9 +514,92 @@ export default function ClassStructureSettings() {
         </DialogActions>
       </Dialog>
 
+      {/* Manage Subjects dialog */}
+      <Dialog
+        open={manageSubjectsTarget !== null}
+        onClose={() => {
+          setManageSubjectsTarget(null);
+          setNewSubjectName("");
+          setNewSubjectError("");
+        }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Manage Subjects - {manageSubjectsTarget?.class_name}</DialogTitle>
+        <DialogContent>
+          {(subjectsByClass[manageSubjectsTarget?.class_id ?? ""] ?? []).length === 0 ? (
+            <Typography color="text.secondary" sx={{ py: 2 }}>
+              No subjects added yet for this class.
+            </Typography>
+          ) : (
+            <List dense disablePadding>
+              {(subjectsByClass[manageSubjectsTarget?.class_id ?? ""] ?? []).map((subject) => (
+                <ListItem
+                  key={subject.subject_id}
+                  disableGutters
+                  secondaryAction={
+                    <Box sx={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+                      <IconButton
+                        size="small"
+                        title="Rename subject"
+                        onClick={() => openRename(manageSubjectsTarget!, undefined, subject)}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        title="Delete subject"
+                        onClick={() => handleDeleteSubject(manageSubjectsTarget!, subject)}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  }
+                >
+                  <ListItemText primary={subject.subject_name} />
+                </ListItem>
+              ))}
+            </List>
+          )}
+
+          <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+            <TextField
+              size="small"
+              fullWidth
+              label="New Subject"
+              placeholder="e.g. Mathematics"
+              value={newSubjectName}
+              onChange={(e) => {
+                setNewSubjectName(e.target.value);
+                setNewSubjectError("");
+              }}
+              onKeyDown={(e) => e.key === "Enter" && handleAddSubject()}
+              error={!!newSubjectError}
+              helperText={newSubjectError}
+            />
+            <Button variant="contained" onClick={handleAddSubject} disabled={!newSubjectName.trim()}>
+              Add
+            </Button>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setManageSubjectsTarget(null);
+              setNewSubjectName("");
+              setNewSubjectError("");
+            }}
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Rename dialog */}
       <Dialog open={renameTarget !== null} onClose={() => setRenameTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>Rename {renameTarget?.sectionItem ? "Section" : "Class"}</DialogTitle>
+        <DialogTitle>
+          Rename {renameTarget?.subjectItem ? "Subject" : renameTarget?.sectionItem ? "Section" : "Class"}
+        </DialogTitle>
         <DialogContent>
           <TextField
             autoFocus

@@ -22,6 +22,7 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import QuizIcon from "@mui/icons-material/Quiz";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
@@ -41,7 +42,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: "Dashboard", path: "section-1", icon: <FolderIcon /> },
   { label: "Quizzes", path: "quizzes", icon: <QuizIcon /> },
-  { label: "Section 3", path: "section-3", icon: <FolderIcon /> },
+  { label: "Study Material", path: "study-material", icon: <MenuBookIcon /> },
   { label: "Users Metabase", path: "section-4", icon: <FolderIcon /> },
   {
     label: "Settings",
